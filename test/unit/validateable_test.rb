@@ -1,7 +1,7 @@
 require 'test_helper'
 
 class Dood
-  include ActiveMerchant::Validateable
+  include ActiveUtils::Validateable
 
   attr_accessor :name, :email, :country
 
@@ -13,7 +13,7 @@ class Dood
 
 end
 
-class ValidateableTest < Test::Unit::TestCase
+class ValidateableTest < Minitest::Test
 
   def setup
     @dood = Dood.new

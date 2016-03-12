@@ -1,11 +1,13 @@
-module ActiveMerchant
+module ActiveUtils
   module NetworkConnectionRetries
     DEFAULT_RETRIES = 3
     DEFAULT_CONNECTION_ERRORS = {
-      EOFError          => "The remote server dropped the connection",
-      Errno::ECONNRESET => "The remote server reset the connection",
-      Timeout::Error    => "The connection to the remote server timed out",
-      Errno::ETIMEDOUT  => "The connection to the remote server timed out"
+      EOFError               => "The remote server dropped the connection",
+      Errno::ECONNRESET      => "The remote server reset the connection",
+      Timeout::Error         => "The connection to the remote server timed out",
+      Errno::ETIMEDOUT       => "The connection to the remote server timed out",
+      SocketError            => "The connection to the remote server could not be established",
+      OpenSSL::SSL::SSLError => "The SSL connection to the remote server could not be established"
     }
 
     def self.included(base)
@@ -19,12 +21,14 @@ module ActiveMerchant
         begin
           yield
         rescue Errno::ECONNREFUSED => e
-          raise ActiveMerchant::RetriableConnectionError, "The remote server refused the connection"
+          raise ActiveUtils::RetriableConnectionError, "The remote server refused the connection"
         rescue OpenSSL::X509::CertificateError => e
           NetworkConnectionRetries.log(options[:logger], :error, e.message, options[:tag])
-          raise ActiveMerchant::ClientCertificateError, "The remote server did not accept the provided SSL certificate"
+          raise ActiveUtils::ClientCertificateError, "The remote server did not accept the provided SSL certificate"
+        rescue Zlib::BufError => e
+          raise ActiveUtils::InvalidResponseError, "The remote server replied with an invalid response"
         rescue *connection_errors.keys => e
-          raise ActiveMerchant::ConnectionError, connection_errors[e.class]
+          raise ActiveUtils::ConnectionError, derived_error_message(connection_errors, e.class)
         end
       end
     end
@@ -41,13 +45,13 @@ module ActiveMerchant
         result = yield
         log_with_retry_details(options[:logger], initial_retries-retries + 1, Time.now.to_f - request_start, "success", options[:tag])
         result
-      rescue ActiveMerchant::RetriableConnectionError => e
+      rescue ActiveUtils::RetriableConnectionError => e
         retries -= 1
 
         log_with_retry_details(options[:logger], initial_retries-retries, Time.now.to_f - request_start, e.message, options[:tag])
         retry unless retries.zero?
-        raise ActiveMerchant::ConnectionError, e.message
-      rescue ActiveMerchant::ConnectionError => e
+        raise ActiveUtils::ConnectionError, e.message
+      rescue ActiveUtils::ConnectionError, ActiveUtils::InvalidResponseError => e
         retries -= 1
         log_with_retry_details(options[:logger], initial_retries-retries, Time.now.to_f - request_start, e.message, options[:tag])
         retry if (options[:retry_safe] || retry_safe) && !retries.zero?
@@ -64,6 +68,11 @@ module ActiveMerchant
     private
     def log_with_retry_details(logger, attempts, time, message, tag)
       NetworkConnectionRetries.log(logger, :info, "connection_attempt=%d connection_request_time=%.4fs connection_msg=\"%s\"" % [attempts, time, message], tag)
+    end
+
+    def derived_error_message(errors, klass)
+      key = (errors.keys & klass.ancestors).first
+      key ? errors[key] : nil
     end
   end
 end

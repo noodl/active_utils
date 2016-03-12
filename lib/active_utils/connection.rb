@@ -3,7 +3,7 @@ require 'net/http'
 require 'net/https'
 require 'benchmark'
 
-module ActiveMerchant
+module ActiveUtils
   class Connection
     include NetworkConnectionRetries
 
@@ -11,7 +11,7 @@ module ActiveMerchant
     OPEN_TIMEOUT = 60
     READ_TIMEOUT = 60
     VERIFY_PEER = true
-    CA_FILE = (File.dirname(__FILE__) + '/../../certs/cacert.pem')
+    CA_FILE = (File.dirname(__FILE__) + '/../certs/cacert.pem')
     CA_PATH = nil
     RETRY_SAFE = false
     RUBY_184_POST_HEADERS = { "Content-Type" => "application/x-www-form-urlencoded" }
@@ -31,6 +31,8 @@ module ActiveMerchant
     attr_accessor :tag
     attr_accessor :ignore_http_status
     attr_accessor :max_retries
+    attr_accessor :proxy_address
+    attr_accessor :proxy_port
 
     def initialize(endpoint)
       @endpoint     = endpoint.is_a?(URI) ? endpoint : URI.parse(endpoint)
@@ -43,6 +45,8 @@ module ActiveMerchant
       @max_retries  = MAX_RETRIES
       @ignore_http_status = false
       @ssl_version = nil
+      @proxy_address = nil
+      @proxy_port = nil
     end
 
     def request(method, body, headers = {})
@@ -88,7 +92,7 @@ module ActiveMerchant
 
     private
     def http
-      http = Net::HTTP.new(endpoint.host, endpoint.port)
+      http = Net::HTTP.new(endpoint.host, endpoint.port, proxy_address, proxy_port)
       configure_debugging(http)
       configure_timeouts(http)
       configure_ssl(http)

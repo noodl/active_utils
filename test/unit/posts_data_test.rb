@@ -1,7 +1,7 @@
 require 'test_helper'
 require 'active_support/core_ext/class'
 
-class PostsDataTest < Test::Unit::TestCase
+class PostsDataTest < Minitest::Test
 
   class SSLPoster
     include PostsData
@@ -18,7 +18,7 @@ class PostsDataTest < Test::Unit::TestCase
     requester.expects(:post).raises(Errno::ECONNREFUSED).times(3)
     Connection.any_instance.stubs(:http => requester)
 
-    assert_raises ActiveMerchant::ConnectionError do
+    assert_raises ActiveUtils::ConnectionError do
       @poster.raw_ssl_request(:post, "https://shopify.com", "", {})
     end
   end
@@ -29,11 +29,11 @@ class PostsDataTest < Test::Unit::TestCase
     requester.expects(:post).raises(Errno::ECONNREFUSED).times(1)
     Connection.any_instance.stubs(:http => requester)
 
-    assert_raises ActiveMerchant::ConnectionError do
+    assert_raises ActiveUtils::ConnectionError do
       @poster.raw_ssl_request(:post, "https://shopify.com", "", {})
     end
   ensure
-    SSLPoster.max_retries = ActiveMerchant::Connection::MAX_RETRIES
+    SSLPoster.max_retries = ActiveUtils::Connection::MAX_RETRIES
   end
 
   def test_logger_warns_if_ssl_strict_disabled
@@ -54,5 +54,11 @@ class PostsDataTest < Test::Unit::TestCase
     SSLPoster.ssl_strict = true
     @poster.raw_ssl_request(:post, "https://shopify.com", "", {})
   end
-  
+
+  def test_set_proxy_address_and_port
+    SSLPoster.proxy_address = 'http://proxy.example.com'
+    SSLPoster.proxy_port = '8888'
+    assert_equal @poster.proxy_address, 'http://proxy.example.com'
+    assert_equal @poster.proxy_port, '8888'
+  end
 end

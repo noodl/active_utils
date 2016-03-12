@@ -1,6 +1,6 @@
 require 'test_helper'
 
-class CountryTest < Test::Unit::TestCase
+class CountryTest < Minitest::Test
   def test_country_from_hash
     country = Country.new(:name => 'Canada', :alpha2 => 'CA', :alpha3 => 'CAN', :numeric => '124')
     assert_equal 'CA', country.code(:alpha2).value
@@ -33,7 +33,7 @@ class CountryTest < Test::Unit::TestCase
   end
 
   def test_find_unknown_country_name
-    assert_raise(InvalidCountryCodeError) do
+    assert_raises(InvalidCountryCodeError) do
       Country.find('Asskickistan')
     end
   end
@@ -55,7 +55,7 @@ class CountryTest < Test::Unit::TestCase
   end
 
   def test_raise_on_nil_name
-    assert_raise(InvalidCountryCodeError) do
+    assert_raises(InvalidCountryCodeError) do
       Country.find(nil)
     end
   end
@@ -65,4 +65,13 @@ class CountryTest < Test::Unit::TestCase
     assert_equal(country_names.sort, country_names)
   end
 
+  def test_canada_uses_postal_codes
+    canada = Country.find('Canada')
+    assert canada.uses_postal_codes?
+  end
+
+  def test_qatar_does_not_use_postal_codes
+    qatar = Country.find('Qatar')
+    refute qatar.uses_postal_codes?
+  end
 end

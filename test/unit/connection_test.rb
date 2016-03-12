@@ -1,13 +1,17 @@
 require 'test_helper'
 
-class ConnectionTest < Test::Unit::TestCase
+class ConnectionTest < Minitest::Test
 
   def setup
     @ok = stub(:code => 200, :message => 'OK', :body => 'success')
 
     @endpoint   = 'https://example.com/tx.php'
-    @connection = ActiveMerchant::Connection.new(@endpoint)
+    @connection = ActiveUtils::Connection.new(@endpoint)
     @connection.logger = stub(:info => nil, :debug => nil, :error => nil)
+  end
+
+  def test_path_to_cert_is_correct
+    assert File.exists?(ActiveUtils::Connection::CA_FILE)
   end
 
   def test_connection_endpoint_parses_string_to_uri
@@ -16,13 +20,13 @@ class ConnectionTest < Test::Unit::TestCase
 
   def test_connection_endpoint_accepts_uri
     endpoint = URI.parse(@endpoint)
-    connection = ActiveMerchant::Connection.new(endpoint)
+    connection = ActiveUtils::Connection.new(endpoint)
     assert_equal endpoint, connection.endpoint
   end
 
   def test_connection_endpoint_raises_uri_error
     assert_raises URI::InvalidURIError do
-      ActiveMerchant::Connection.new("not a URI")
+      ActiveUtils::Connection.new("not a URI")
     end
   end
 
@@ -34,7 +38,7 @@ class ConnectionTest < Test::Unit::TestCase
   end
 
   def test_successful_post_request
-    Net::HTTP.any_instance.expects(:post).with('/tx.php', 'data', ActiveMerchant::Connection::RUBY_184_POST_HEADERS).returns(@ok)
+    Net::HTTP.any_instance.expects(:post).with('/tx.php', 'data', ActiveUtils::Connection::RUBY_184_POST_HEADERS).returns(@ok)
     response = @connection.request(:post, 'data', {})
     assert_equal 'success', response.body
   end
@@ -52,31 +56,31 @@ class ConnectionTest < Test::Unit::TestCase
   end
 
   def test_get_raises_argument_error_if_passed_data
-    assert_raise(ArgumentError) do
+    assert_raises(ArgumentError) do
       @connection.request(:get, 'data', {})
     end
   end
 
   def test_request_raises_when_request_method_not_supported
-    assert_raise(ArgumentError) do
+    assert_raises(ArgumentError) do
       @connection.request(:head, nil, {})
     end
   end
 
   def test_override_max_retries
-    assert_not_equal 1, @connection.max_retries
+    refute_equal 1, @connection.max_retries
     @connection.max_retries = 1
     assert_equal 1, @connection.max_retries
   end
 
   def test_override_ssl_version
-    assert_not_equal :SSLv3, @connection.ssl_version
+    refute_equal :SSLv3, @connection.ssl_version
     @connection.ssl_version = :SSLv3
     assert_equal :SSLv3, @connection.ssl_version
   end
 
   def test_default_read_timeout
-    assert_equal ActiveMerchant::Connection::READ_TIMEOUT, @connection.read_timeout
+    assert_equal ActiveUtils::Connection::READ_TIMEOUT, @connection.read_timeout
   end
 
   def test_override_read_timeout
@@ -90,7 +94,7 @@ class ConnectionTest < Test::Unit::TestCase
   end
 
   def test_default_verify_peer
-    assert_equal ActiveMerchant::Connection::VERIFY_PEER, @connection.verify_peer
+    assert_equal ActiveUtils::Connection::VERIFY_PEER, @connection.verify_peer
   end
 
   def test_override_verify_peer
@@ -99,8 +103,8 @@ class ConnectionTest < Test::Unit::TestCase
   end
 
   def test_default_ca_file
-    assert_equal ActiveMerchant::Connection::CA_FILE, @connection.ca_file
-    assert_equal ActiveMerchant::Connection::CA_FILE, @connection.send(:http).ca_file
+    assert_equal ActiveUtils::Connection::CA_FILE, @connection.ca_file
+    assert_equal ActiveUtils::Connection::CA_FILE, @connection.send(:http).ca_file
   end
 
   def test_override_ca_file
@@ -110,8 +114,8 @@ class ConnectionTest < Test::Unit::TestCase
   end
 
   def test_default_ca_path
-    assert_equal ActiveMerchant::Connection::CA_PATH, @connection.ca_path
-    assert_equal ActiveMerchant::Connection::CA_PATH, @connection.send(:http).ca_path
+    assert_equal ActiveUtils::Connection::CA_PATH, @connection.ca_path
+    assert_equal ActiveUtils::Connection::CA_PATH, @connection.send(:http).ca_path
   end
 
   def test_override_ca_path
@@ -120,11 +124,29 @@ class ConnectionTest < Test::Unit::TestCase
     assert_equal "/bogus", @connection.send(:http).ca_path
   end
 
+  def test_default_proxy_address_is_nil
+    assert_equal nil, @connection.proxy_address
+  end
+
+  def test_default_proxy_port_is_nil
+    assert_equal nil, @connection.proxy_port
+  end
+
+  def test_override_proxy_address
+    @connection.proxy_address = "http://proxy.example.com"
+    assert_equal "http://proxy.example.com", @connection.proxy_address
+  end
+
+  def test_override_proxy_port
+    @connection.proxy_port = "8888"
+    assert_equal "8888", @connection.proxy_port
+  end
+
   def test_unrecoverable_exception
     @connection.logger.expects(:info).once
     Net::HTTP.any_instance.expects(:post).raises(EOFError)
 
-    assert_raises(ActiveMerchant::ConnectionError) do
+    assert_raises(ActiveUtils::ConnectionError) do
       @connection.request(:post, '')
     end
   end
@@ -133,16 +155,14 @@ class ConnectionTest < Test::Unit::TestCase
     @connection.logger.expects(:info).never
     Net::HTTP.any_instance.expects(:post).times(2).raises(Errno::ECONNREFUSED).then.returns(@ok)
 
-    assert_nothing_raised do
-      @connection.request(:post, '')
-    end
+    @connection.request(:post, '')
   end
 
   def test_failure_limit_reached
     @connection.logger.expects(:info).once
-    Net::HTTP.any_instance.expects(:post).times(ActiveMerchant::Connection::MAX_RETRIES).raises(Errno::ECONNREFUSED)
+    Net::HTTP.any_instance.expects(:post).times(ActiveUtils::Connection::MAX_RETRIES).raises(Errno::ECONNREFUSED)
 
-    assert_raises(ActiveMerchant::ConnectionError) do
+    assert_raises(ActiveUtils::ConnectionError) do
       @connection.request(:post, '')
     end
   end
@@ -152,9 +172,7 @@ class ConnectionTest < Test::Unit::TestCase
 
     @connection.retry_safe = true
 
-    assert_nothing_raised do
-      @connection.request(:post, '')
-    end
+    @connection.request(:post, '')
   end
 
   def test_mixture_of_failures_with_retry_safe_enabled
@@ -164,7 +182,7 @@ class ConnectionTest < Test::Unit::TestCase
 
     @connection.retry_safe = true
 
-    assert_raises(ActiveMerchant::ConnectionError) do
+    assert_raises(ActiveUtils::ConnectionError) do
       @connection.request(:post, '')
     end
   end
@@ -173,7 +191,7 @@ class ConnectionTest < Test::Unit::TestCase
     @connection.logger.expects(:error).once
     Net::HTTP.any_instance.expects(:post).raises(OpenSSL::X509::CertificateError)
 
-    assert_raises(ActiveMerchant::ClientCertificateError) do
+    assert_raises(ActiveUtils::ClientCertificateError) do
       @connection.request(:post, '')
     end
   end
